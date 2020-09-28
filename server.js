@@ -9,7 +9,7 @@ const HOST = '0.0.0.0';
 // App
 const app = express();
 app.get('/', (req, res) => {
-  res.send('<h1 style="color:red;">Krishna App - version-2!! - Running in ECS !!</h1> \n');
+  res.send('<h1 style="color:red;">Krishna App - version-3!! - Running in ECS !!</h1> \n');
 });
 
 app.listen(PORT, HOST);

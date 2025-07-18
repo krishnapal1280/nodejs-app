@@ -1,0 +1,14 @@
+This C# course on Udemy is a comprehensive masterclass that takes you from the fundamentals of C# to more advanced topics. It is designed for beginners with no prior programming experience, as well as for existing developers who want to solidify their C# knowledge.
+Here's a summary of what the course covers:
+Core Concepts:
+ * C# Fundamentals: You will start with the basics of C#, including the .NET CLI, built-in types, data structures, program execution flow, and the language's syntax.
+ * Object-Oriented Programming: The course delves into intermediate concepts like classes, structures, enumerations, fields, properties, methods, inheritance, and interfaces.
+ * Advanced Topics: You will also explore more advanced features of C# such as generics, nullable value types, delegates, lambdas, event-based programming, and error handling.
+Practical Skills:
+ * Hands-On Learning: The course emphasizes practical application with numerous exercises and coding challenges to reinforce the concepts learned.
+ * Development Environment: You will learn to use Visual Studio Code to write, build, and run C# applications on Windows, Mac, and Linux.
+ * Real-World Applications: The curriculum includes working with files, folders, text, and paths within the .NET framework, as well as database interaction using MSSQL.
+Specialized Areas:
+ * Game Development: Learn to use C# with the Unity engine to create games, control game objects, and manage game logic.
+ * Desktop Application Development: The course covers building Windows Forms and WPF applications, event-driven programming, and creating user-friendly interfaces.
+By the end of this course, you will have the necessary knowledge and practical skills to be a proficient C# developer, ready for both academic and professional environments. The course also includes content to prepare you for C# certification exams.

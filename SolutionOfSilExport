@@ -1,0 +1,105 @@
+### 3. System Architecture and Components
+
+The SIL Notification System is composed of several modular .NET 8 console applications and a shared class library, designed for distributed deployment across multiple Windows machines. The architecture emphasizes separation of concerns, with each component handling a specific phase of the SIL processing workflow: claiming cases, extracting ISINs, retrieving account details, sending emails, and retriggering failed cases. The shared library (SILCommon) provides common models, database context, interfaces, and utilities to ensure consistency and reusability.
+
+Below is a detailed description of each project, including its purpose, key responsibilities, components, and integration points within the overall system.
+
+#### 3.1 SILCommon (Class Library)
+**Purpose**: SILCommon serves as the foundational shared library for the entire solution, encapsulating common data models, database interactions, service interfaces, mock implementations for testing, utilities, and dependency injection extensions. It promotes code reuse and maintains consistency across all console applications, reducing duplication and facilitating future maintenance or extensions (e.g., Azure migration).
+
+**Key Responsibilities**:
+- Define entity models for database tables (e.g., SILCase, SILCaseDetails, SILCaseDocumentsDetail, SILIsinAccountMapping, SILAccountDetails) with Entity Framework Core annotations for relationships and keys.
+- Provide the EF Core DbContext (SILDbContext) for database operations, including configuration for composite keys.
+- Declare interfaces for external services (IAIFClient, ICDCClient, IMailProcessingClient) and logging (IIdpLogger) to enable loose coupling and mocking.
+- Include mock implementations for services and logging to support unit/integration testing without real external dependencies.
+- Offer utility classes for JSON parsing (e.g., extracting ISINs from CaseData) and concurrency helpers (e.g., generating instance IDs based on machine name and process ID).
+- Extend IServiceCollection for registering services and mocks via dependency injection.
+
+**Components**:
+- **Models.cs**: Defines POCO classes for all entities with data annotations.
+- **SILDbContext.cs**: EF Core context with DbSets and OnModelCreating for custom configurations.
+- **Interfaces.cs**: Abstracts for clients and logger.
+- **MockImplementations.cs**: Test mocks for interfaces.
+- **Utilities.cs**: Static helpers for JSON parsing and instance ID generation.
+- **ServiceCollectionExtensions.cs**: DI registration methods.
+- **appsettings.json**: Template for connection strings (copied to other projects).
+
+**Integration Points**: Referenced by all console projects. Database connections are configured via appsettings.json. Mocks can be swapped for real implementations in production.
+
+#### 3.2 SILCaseClaimer (Console Application)
+**Purpose**: SILCaseClaimer acts as the entry point for claiming eligible SIL cases from the database, marking them for processing by assigning a server-specific instance ID and advancing the case status. It ensures concurrency safety across multiple machines by atomically claiming cases, preventing duplicate processing.
+
+**Key Responsibilities**:
+- Poll the database for cases in a specific status (e.g., ReadyForProcessing) within the current business day.
+- Atomically claim cases by updating ProcessingInstanceId and ProcessingTimestamp, incrementing attempt counts.
+- Advance the CaseStatusCode based on the current status (e.g., from 0 to 1 for ISIN extraction).
+- Handle failures by setting negative status codes and releasing claims.
+- Support command-line arguments for specific case IDs or status codes.
+
+**Components**:
+- **Program.cs**: Entry point, sets up DI, parses command-line args, and invokes CaseClaimerService.
+- **CaseClaimerService.cs**: Core logic for processing claims in a transaction, with query filtering, updates, and error handling.
+
+**Integration Points**: Uses SILCommon for DbContext, logger, and utilities. Deployed as a scheduled task on Windows machines to run periodically.
+
+#### 3.3 SILISINExtractor (Console Application)
+**Purpose**: SILISINExtractor is a polling service that extracts unique ISINs from claimed cases, checks for current-day mappings in the database, calls the AIFClient if needed to retrieve associated account IDs, and caches them in SILIsinAccountMappings. It advances the case status upon completion or failure.
+
+**Key Responsibilities**:
+- Run an infinite polling loop (with configurable delay) to query claimed cases in the target status.
+- Parse CaseData JSON to extract ISINs.
+- For each ISIN, check if current-day mappings exist; if not, call AIFClient and insert new mappings.
+- Update case status and release claims.
+- Support command-line for specific cases or statuses.
+
+**Components**:
+- **Program.cs**: Entry point, DI setup, arg parsing, invokes ISINExtractorService.
+- **ISINExtractorService.cs**: Polling and processing logic, including DB queries, AIF calls, and transaction management.
+
+**Integration Points**: Depends on SILCommon for DbContext, AIFClient (mock/real), logger, and utilities. Runs as a long-running service on Windows.
+
+#### 3.4 SILAccountDetailsRetriever (Console Application)
+**Purpose**: SILAccountDetailsRetriever polls for cases ready for account detail retrieval, aggregates account IDs from ISIN mappings, checks for current-day details in SILAccountDetails, calls CDCClient if needed to fetch client/advisor info, and updates/inserts records. It advances the case status accordingly.
+
+**Key Responsibilities**:
+- Infinite polling loop to process claimed cases in the target status.
+- Gather unique account IDs from ISIN mappings.
+- For each account, check if current-day details exist; if not, call CDC services and update/insert details.
+- Handle failures and release claims.
+- Command-line support for targeting specific cases/statuses.
+
+**Components**:
+- **Program.cs**: Entry point, DI, arg parsing, invokes AccountDetailsRetrieverService.
+- **AccountDetailsRetrieverService.cs**: Polling, account aggregation, CDC calls, DB updates in transactions.
+
+**Integration Points**: Uses SILCommon for DbContext, CDCClient, logger, utilities. Deployed as a persistent service.
+
+#### 3.5 SILEmailSender (Console Application)
+**Purpose**: SILEmailSender polls for cases ready for notification, consolidates relationships (ISINs, accounts, client/advisor details), sends emails to clients and advisors based on subscription/waiver flags using MailProcessingClient, updates sent flags, and finalizes case status.
+
+**Key Responsibilities**:
+- Polling loop for claimed cases in email-sending status.
+- Aggregate data from mappings and details.
+- Send client emails if conditions met, advisor emails always (with client sent flag).
+- Update account-level sent timestamps and release claims.
+- Command-line for specific targeting.
+
+**Components**:
+- **Program.cs**: Entry point, DI, args, invokes EmailSenderService.
+- **EmailSenderService.cs**: Polling, data consolidation, email dispatch, DB updates.
+
+**Integration Points**: Relies on SILCommon for DbContext, MailProcessingClient, logger, utilities. Runs as a service.
+
+#### 3.6 SILCaseRetrigger (Console Application)
+**Purpose**: SILCaseRetrigger provides on-demand retriggering of failed or stalled cases by resetting claims and updating CaseStatusCode, allowing pollers to re-process from a specified point.
+
+**Key Responsibilities**:
+- Update CaseStatusCode for a given CaseId, resetting ProcessingInstanceId/Timestamp.
+- Validate status range and existence.
+- Command-line required for CaseId and status.
+
+**Components**:
+- **Program.cs**: Entry point, DI, args, invokes CaseRetriggerService.
+- **CaseRetriggerService.cs**: Update logic in transaction, with validation and logging.
+
+**Integration Points**: Uses SILCommon for DbContext and logger. Run manually or scripted for failures.

@@ -1,3 +1,57 @@
+SILCaseClaimer/Program.cs
+--------------------------------------------
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using SILCommon;
+using SILCommon.Interfaces;
+using SILCommon.Utilities;
+using System;
+using System.CommandLine;
+using System.Threading.Tasks;
+
+namespace SILCaseClaimer
+{
+    class Program
+    {
+        static async Task Main(string[] args)
+        {
+            // Build configuration from appsettings.json
+            var config = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            // Set up DI container
+            var services = new ServiceCollection();
+            services.AddDbContext<SILDbContext>(options => options.UseSqlServer(config.GetConnectionString("SILDb")));
+            services.AddSILServices(config); // Pass configuration for AIFClient and other services
+            var serviceProvider = services.BuildServiceProvider();
+
+            // Resolve dependencies
+            var dbContext = serviceProvider.GetRequiredService<SILDbContext>();
+            var logger = serviceProvider.GetRequiredService<IIdpLogger>();
+            var configService = serviceProvider.GetRequiredService<IConfigurationService>();
+
+            // Define command-line options
+            var caseIdOption = new Option<string>("--caseId", "Specific case ID to claim");
+            var statusCodeOption = new Option<int>("--statusCode", "Status code to claim from") { DefaultValue = 0 };
+            var rootCommand = new RootCommand("Claims SIL cases for processing.");
+            rootCommand.AddOption(caseIdOption);
+            rootCommand.AddOption(statusCodeOption);
+
+            // Set handler for the command
+            rootCommand.SetHandler(async (caseId, statusCode) =>
+            {
+                var instanceId = ConcurrencyHelper.GetInstanceId();
+                await new CaseClaimerService(dbContext, logger, configService).Process(instanceId, caseId, statusCode);
+            }, caseIdOption, statusCodeOption);
+
+            // Invoke the command-line parser
+            await rootCommand.InvokeAsync(args);
+        }
+    }
+}
+
 SILCommon/SILDbContext.cs
 ------------------------------------
 
@@ -1140,5 +1194,6 @@ namespace SILCaseRetrigger
         }
     }
 }
+
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------

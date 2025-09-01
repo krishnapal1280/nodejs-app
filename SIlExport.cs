@@ -475,12 +475,18 @@ namespace SILCaseClaimer
             using var transaction = await _db.Database.BeginTransactionAsync();
             try
             {
-                var query = from c in _db.SILCases
-                            join d in _db.SILCaseDetails on c.CaseId equals d.CaseId
-                            where d.CaseStatusCode == requiredStatusCode
-                                  && (c.ProcessingInstanceId == null || c.ProcessingTimestamp < DateTime.UtcNow.AddMinutes(-30))
-                                  && (string.IsNullOrEmpty(specificCaseId) ? (c.CreationTimestamp >= todayStart && c.CreationTimestamp < todayEnd) : true)
-                            select new { Case = c, Details = d };
+               var query = from c in _dbContext.SILCases
+                                join d in (
+                                    from details in _dbContext.SILCaseDetails
+                                    group details by details.CaseId into g
+                                    select g.OrderByDescending(x => x.UpdateTimestamp).FirstOrDefault()
+                                ) on c.CaseId equals d.CaseId
+                                where d.CaseStatusCode == (int)requiredStatusCode
+                                      && (c.ProcessingInstanceId == null || c.ProcessingTimestamp < today)
+                                      && (string.IsNullOrEmpty(specificCaseId) 
+                                          ? (c.CreationTimestamp >= startTime && c.CreationTimestamp < endTime) 
+                                          : (c.CaseId == specificCaseId))
+                                select new { Case = c, Details = d };
 
                 if (!string.IsNullOrEmpty(specificCaseId))
                 {
@@ -1197,3 +1203,4 @@ namespace SILCaseRetrigger
 
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------
+

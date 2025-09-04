@@ -24,27 +24,20 @@ namespace SILCaseClaimer
         public async Task<Dictionary<string, Dictionary<string, object>>> RetrieveAccountDetails(RequiredStatusCodes statusCode)
         {
             var today = DateTime.Today;
-            var startDate = today.AddHours(7); // 7:00 AM today
-            var endDate = today.AddHours(19);  // 7:00 PM today
-
             var accountMappings = new Dictionary<string, Dictionary<string, object>>();
 
             try
             {
-                // Join SILCases, SILCaseDetails, and SILISINAccountMappings, filtering by latest status and time window
-                var mappings = await _dbContext.SILCases
+                // Join SILCaseDetails and SILISINAccountMappings, filtering by latest status and InsertDate
+                var mappings = await _dbContext.SILCaseDetails
+                    .GroupBy(d => d.CaseId)
+                    .Select(g => g.OrderByDescending(d => d.UpdateTimestamp).First())
+                    .Where(d => d.CaseStatusCode == (int)statusCode)
                     .Join(
-                        _dbContext.SILCaseDetails.GroupBy(d => d.CaseId)
-                            .Select(g => g.OrderByDescending(d => d.UpdateTimestamp).First()),
-                        c => c.CaseId,
+                        _dbContext.SILISINAccountMappings.Where(m => m.InsertDate.Date == today),
                         d => d.CaseId,
-                        (c, d) => new { Case = c, Details = d })
-                    .Where(x => x.Details.CaseStatusCode == (int)statusCode && x.Case.CreationTimestamp >= startDate && x.Case.CreationTimestamp < endDate)
-                    .Join(
-                        _dbContext.SILISINAccountMappings,
-                        cd => cd.Case.CaseId,
                         m => m.CaseId,
-                        (cd, m) => new { cd.Case.CaseId, m.AccountId })
+                        (d, m) => new { d.CaseId, m.AccountId })
                     .GroupBy(x => x.CaseId)
                     .Select(g => new { CaseId = g.Key, AccountIds = g.Select(x => x.AccountId).Distinct().ToList() })
                     .ToListAsync();

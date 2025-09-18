@@ -1,0 +1,142 @@
+Below is a well-structured user story for the `SILEmailSender` project implementation, adhering to proper standards (e.g., INVEST: Independent, Negotiable, Valuable, Estimable, Small, Testable). The user story includes a clear description, self-explanatory acceptance criteria, and a definition of done (DoD). The requirement to update the `SILCaseNotificationTable` with email status for each client, advisor, and client after each send attempt (success or failure) is incorporated into the acceptance criteria.
+
+---
+
+### User Story
+
+**Title:** As a Case Manager, I want the SILEmailSender to send email notifications to clients and their advisors based on case status changes, so that they are informed in a timely manner.
+
+**As a [Role]:** Case Manager  
+**I want [Feature]:** the SILEmailSender to send email notifications to clients and their advisors based on case status changes  
+**So that [Benefit]:** they are informed in a timely manner  
+
+**Description:**  
+The `SILEmailSender` project should automatically send email notifications to clients and their assigned advisors (Client Advisor, CA) when a case status changes (e.g., from Unclaimed to Claimed). The system must retrieve relevant details (e.g., `CaseId`, `AccountId`, client email, and advisor email) from the `SILISINAccountMappings` and `SILCaseDetails` tables. After each email send attempt, the system should update the `SILCaseNotificationTable` with the status (success or failure) for both client and advisor emails, including timestamps. This ensures an auditable trail of email notifications.
+
+**Priority:** High  
+**Estimated Effort:** 8 story points  
+**Dependencies:** Access to `SILDbContext`, email service integration (e.g., SMTP or third-party API), and `SILCaseNotificationTable` schema.
+
+---
+
+### Acceptance Criteria
+
+The acceptance criteria are self-explanatory, covering all functional and non-functional requirements, including the update of the `SILCaseNotificationTable`.
+
+- **AC1: Email Trigger on Status Change**  
+  - Given a case status changes (e.g., from Unclaimed to Claimed) in `SILCaseDetails`,  
+  - When the `SILEmailSender` is triggered,  
+  - Then it should send an email to the client and their assigned advisor using the email addresses retrieved from `SILISINAccountMappings`.  
+  - Example: For `CaseId = "C1"`, `AccountId = "A1"`, send to `client@example.com` and `advisor@example.com`.
+
+- **AC2: Successful Email Send**  
+  - Given an email send attempt is successful for both client and advisor,  
+  - When the email is sent,  
+  - Then the `SILCaseNotificationTable` should be updated with:  
+    - `CaseId` = the case ID (e.g., "C1"),  
+    - `AccountId` = the account ID (e.g., "A1"),  
+    - `ClientEmailSend` = `true`,  
+    - `CAMailSend` = `true`,  
+    - `ClientMailSendTimestamp` = the current timestamp (e.g., "2025-09-18 16:10:00 IST"),  
+    - `CAEmailSendTimestamp` = the current timestamp (e.g., "2025-09-18 16:10:00 IST"),  
+    - `InsertDateTimestamp` = the current date and time (e.g., "2025-09-18 16:10:00 IST").  
+
+- **AC3: Failed Email Send for Client**  
+  - Given an email send attempt fails for the client (e.g., invalid email address),  
+  - When the email is sent,  
+  - Then the `SILCaseNotificationTable` should be updated with:  
+    - `CaseId` = the case ID (e.g., "C1"),  
+    - `AccountId` = the account ID (e.g., "A1"),  
+    - `ClientEmailSend` = `false`,  
+    - `CAMailSend` = `true` (if advisor email succeeds),  
+    - `ClientMailSendTimestamp` = the current timestamp (e.g., "2025-09-18 16:10:00 IST"),  
+    - `CAEmailSendTimestamp` = the current timestamp (if advisor email succeeds, otherwise null),  
+    - `InsertDateTimestamp` = the current date and time (e.g., "2025-09-18 16:10:00 IST").  
+
+- **AC4: Failed Email Send for Advisor**  
+  - Given an email send attempt fails for the advisor (e.g., server error),  
+  - When the email is sent,  
+  - Then the `SILCaseNotificationTable` should be updated with:  
+    - `CaseId` = the case ID (e.g., "C1"),  
+    - `AccountId` = the account ID (e.g., "A1"),  
+    - `ClientEmailSend` = `true` (if client email succeeds),  
+    - `CAMailSend` = `false`,  
+    - `ClientMailSendTimestamp` = the current timestamp (if client email succeeds, otherwise null),  
+    - `CAEmailSendTimestamp` = the current timestamp (e.g., "2025-09-18 16:10:00 IST"),  
+    - `InsertDateTimestamp` = the current date and time (e.g., "2025-09-18 16:10:00 IST").  
+
+- **AC5: Both Emails Fail**  
+  - Given email send attempts fail for both client and advisor (e.g., network issue),  
+  - When the emails are sent,  
+  - Then the `SILCaseNotificationTable` should be updated with:  
+    - `CaseId` = the case ID (e.g., "C1"),  
+    - `AccountId` = the account ID (e.g., "A1"),  
+    - `ClientEmailSend` = `false`,  
+    - `CAMailSend` = `false`,  
+    - `ClientMailSendTimestamp` = the current timestamp (e.g., "2025-09-18 16:10:00 IST"),  
+    - `CAEmailSendTimestamp` = the current timestamp (e.g., "2025-09-18 16:10:00 IST"),  
+    - `InsertDateTimestamp` = the current date and time (e.g., "2025-09-18 16:10:00 IST").  
+
+- **AC6: Email Content**  
+  - Given an email is sent,  
+  - When the email is generated,  
+  - Then the email body should include the `CaseId`, `AccountId`, and the new status (e.g., "Case C1 for Account A1 has been Claimed").  
+  - Example: Subject = "Case Status Update", Body = "Dear [Name], Case C1 for Account A1 has been Claimed on 2025-09-18."
+
+- **AC7: Error Logging**  
+  - Given an email send attempt fails,  
+  - When the failure occurs,  
+  - Then an error should be logged via `IIdpLogger` with details including `CaseId`, `AccountId`, and the error message (e.g., "Failed to send email for CaseId C1, AccountId A1: Invalid email address").
+
+- **AC8: Performance**  
+  - Given multiple cases need email notifications,  
+  - When the `SILEmailSender` processes 100 cases,  
+  - Then it should complete within 60 seconds under normal network conditions.
+
+---
+
+### Definition of Done (DoD)
+
+The user story is considered complete when the following criteria are met:
+
+- **Functional Completion**:
+  - The `SILEmailSender` class is implemented to trigger email notifications on case status changes.
+  - The system successfully sends emails to clients and advisors using retrieved email addresses.
+  - The `SILCaseNotificationTable` is updated with `CaseId`, `AccountId`, `ClientEmailSend`, `CAMailSend`, `ClientMailSendTimestamp`, `CAEmailSendTimestamp`, and `InsertDateTimestamp` for each send attempt.
+
+- **Code Quality**:
+  - Code is reviewed and follows the team’s coding standards (e.g., naming conventions, error handling).
+  - Unit tests cover all acceptance criteria (e.g., success, failure cases) with at least 80% code coverage.
+  - Integration tests verify email sending and database updates.
+
+- **Documentation**:
+  - Inline comments explain complex logic (e.g., email construction, database updates).
+  - A README file or technical documentation includes setup instructions and configuration details (e.g., SMTP settings).
+
+- **Non-Functional Requirements**:
+  - Performance meets the 60-second threshold for 100 cases.
+  - Error logging is implemented and verifiable in the log files.
+
+- **Deployment and Testing**:
+  - The solution is deployed to a test environment.
+  - Manual testing confirms email delivery and table updates for at least 5 different scenarios (e.g., success, client fail, advisor fail, both fail).
+  - Automated tests pass in the CI/CD pipeline.
+
+- **Approval**:
+  - The Case Manager reviews and approves the functionality in the test environment.
+  - Any identified bugs or issues are resolved and re-tested.
+
+---
+
+### Additional Notes
+- **Database Schema**: Ensure `SILCaseNotificationTable` exists with the specified columns (`CaseId`, `AccountId`, `ClientEmailSend`, `CAMailSend`, `ClientMailSendTimestamp`, `CAEmailSendTimestamp`, `InsertDateTimestamp`), with appropriate data types (e.g., `nvarchar` for IDs, `bit` for booleans, `datetime` for timestamps).
+- **Email Service**: Integrate with an email service (e.g., SMTP, SendGrid) and configure it via `appsettings.json` or environment variables.
+- **Extensibility**: The design allows adding new status triggers or email templates without major refactoring.
+
+### Next Steps
+- **Implementation**: Develop the `SILEmailSender` class based on this user story.
+- **Review**: Share the user story with the team for feedback.
+- **Testing**: Create unit and integration tests aligned with the acceptance criteria.
+- **Feedback**: Let me know if you need a code sample or further refinements!
+
+As of 04:10 PM IST, Thursday, September 18, 2025, this user story is ready for implementation. Let me know how you’d like to proceed!

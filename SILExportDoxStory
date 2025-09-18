@@ -1,0 +1,172 @@
+Below is a well-structured user story for integrating the `SILEmailSender` application with the Dox system, adhering to proper standards (e.g., INVEST: Independent, Negotiable, Valuable, Estimable, Small, Testable). The user story includes a clear description, self-explanatory acceptance criteria, and a definition of done (DoD). The integration involves storing sent emails as PDFs in Azure Blob Storage via the Dox system using REST APIs hosted on Apigee, with the `EXP.DoxClient.Core` package, and updating the `SILDocumentsDetail` table with the returned `DocumentExchangeId`.
+
+---
+
+### User Story
+
+**Title:** As a Compliance Officer, I want the SILEmailSender to integrate with the Dox system to store sent email notifications as PDFs in Azure Blob Storage, so that there is a secure and auditable record of all communications.
+
+**As a [Role]:** Compliance Officer  
+**I want [Feature]:** the SILEmailSender to integrate with the Dox system to store sent email notifications as PDFs in Azure Blob Storage  
+**So that [Benefit]:** there is a secure and auditable record of all communications  
+
+**Description:**  
+The `SILEmailSender` application should integrate with the Dox system, which stores documents in Azure Blob Storage, to archive email notifications sent to clients and their advisors as PDF files. The integration will use REST APIs hosted on Apigee, accessed via the `EXP.DoxClient.Core` NuGet package. After a successful email send, the application will convert the email content to a PDF and send it to Dox. Upon successful storage, Dox will return a `DocumentExchangeId`, which must be stored in the `SILDocumentsDetail` table for tracking and auditing purposes. This ensures compliance with record-keeping requirements.
+
+**Priority:** High  
+**Estimated Effort:** 10 story points  
+**Dependencies:** `EXP.DoxClient.Core` package, Apigee API credentials, Azure Blob Storage access, and `SILDocumentsDetail` table schema.
+
+---
+
+### Acceptance Criteria
+
+The acceptance criteria are self-explanatory, covering all functional and non-functional requirements, including the integration with Dox and database updates.
+
+- **AC1: Email to PDF Conversion**  
+  - Given an email is successfully sent to a client and advisor,  
+  - When the email content (including subject, body, and timestamps) is prepared,  
+  - Then it should be converted to a PDF file with a filename format `CaseId_AccountId_EmailDate.pdf` (e.g., `C1_A1_2025-09-18.pdf`).  
+
+- **AC2: Dox Integration via REST API**  
+  - Given a PDF file is generated from a sent email,  
+  - When the `SILEmailSender` uses the `EXP.DoxClient.Core` package to call the Dox REST API (hosted on Apigee),  
+  - Then the PDF should be successfully uploaded to Azure Blob Storage, and the API should return a `DocumentExchangeId` (e.g., "DOCX123456").  
+
+- **AC3: Successful Dox Upload and Database Update**  
+  - Given the Dox API returns a `DocumentExchangeId` after a successful upload,  
+  - When the upload is complete,  
+  - Then the `SILDocumentsDetail` table should be updated with:  
+    - `CaseId` = the case ID (e.g., "C1"),  
+    - `AccountId` = the account ID (e.g., "A1"),  
+    - `DocumentExchangeId` = the returned ID (e.g., "DOCX123456"),  
+    - `DocumentType` = "EmailNotification" (or similar),  
+    - `UploadTimestamp` = the current timestamp (e.g., "2025-09-18 16:30:00 IST"),  
+    - `InsertDateTimestamp` = the current date and time (e.g., "2025-09-18 16:30:00 IST").  
+
+- **AC4: Failed Dox Upload**  
+  - Given the Dox API returns an error (e.g., authentication failure or storage issue),  
+  - When the upload attempt is made,  
+  - Then the `SILEmailSender` should log the error via `IIdpLogger` with details including `CaseId`, `AccountId`, and the error message (e.g., "Failed to upload PDF for CaseId C1, AccountId A1: Authentication failed"),  
+  - And the `SILDocumentsDetail` table should not be updated for that attempt.  
+
+- **AC5: API Authentication**  
+  - Given the `SILEmailSender` initiates a call to the Dox API,  
+  - When the request is sent,  
+  - Then it should use valid Apigee API credentials (e.g., API key or OAuth token) configured in `appsettings.json` to authenticate successfully.  
+  - Example: `"DoxApiKey": "your_apikey_here"` under `AppSettings`.  
+
+- **AC6: Error Handling for Multiple Emails**  
+  - Given emails are sent to both client and advisor for a case,  
+  - When one upload to Dox fails (e.g., client email PDF) but the other succeeds (e.g., advisor email PDF),  
+  - Then the `SILDocumentsDetail` table should contain two entries: one with a valid `DocumentExchangeId` for the successful upload and one with no `DocumentExchangeId` (or null) for the failed upload, along with the respective error logged.  
+
+- **AC7: Performance**  
+  - Given 50 email notifications are sent and uploaded to Dox,  
+  - When the `SILEmailSender` processes these requests,  
+  - Then it should complete within 120 seconds under normal network and storage conditions.  
+
+- **AC8: Audit Trail**  
+  - Given a document is uploaded to Dox,  
+  - When the process completes,  
+  - Then the `SILDocumentsDetail` table should reflect the `DocumentExchangeId` and timestamps, allowing traceability to the original email send event in `SILCaseNotificationTable`.  
+
+---
+
+### Definition of Done (DoD)
+
+The user story is considered complete when the following criteria are met:
+
+- **Functional Completion**:
+  - The `SILEmailSender` integrates with the Dox system using the `EXP.DoxClient.Core` package and Apigee-hosted REST APIs.
+  - Emails are converted to PDFs and successfully uploaded to Azure Blob Storage via Dox.
+  - The `SILDocumentsDetail` table is updated with `DocumentExchangeId`, `CaseId`, `AccountId`, and timestamps for each successful upload.
+
+- **Code Quality**:
+  - Code is reviewed and follows the team’s coding standards (e.g., error handling, REST API calls).
+  - Unit tests cover all acceptance criteria (e.g., success, failure cases) with at least 80% code coverage.
+  - Integration tests verify PDF generation, Dox API calls, and database updates.
+
+- **Documentation**:
+  - Inline comments explain the Dox integration logic (e.g., API calls, PDF conversion).
+  - A README file or technical documentation includes setup instructions, Apigee API endpoint details, and `EXP.DoxClient.Core` configuration.
+
+- **Non-Functional Requirements**:
+  - Performance meets the 120-second threshold for 50 cases.
+  - Error logging is implemented and verifiable in the log files.
+  - Security measures (e.g., API key encryption) are in place for Apigee authentication.
+
+- **Deployment and Testing**:
+  - The solution is deployed to a test environment with access to a mock Dox API and Azure Blob Storage.
+  - Manual testing confirms PDF upload and table updates for at least 5 scenarios (e.g., success, client fail, advisor fail, both fail).
+  - Automated tests pass in the CI/CD pipeline.
+
+- **Approval**:
+  - The Compliance Officer reviews and approves the functionality in the test environment.
+  - Any identified bugs or issues are resolved and re-tested.
+
+---
+
+### Additional Notes
+- **Database Schema**: Ensure `SILDocumentsDetail` table exists with columns (`CaseId`, `AccountId`, `DocumentExchangeId`, `DocumentType`, `UploadTimestamp`, `InsertDateTimestamp`), with appropriate data types (e.g., `nvarchar` for IDs, `datetime` for timestamps).
+- **Dox API**: Configure the Apigee endpoint (e.g., `https://api.apigee.net/dox/v1/upload`) and authentication details in `appsettings.json`.
+- **Package Reference**: Add `EXP.DoxClient.Core` to `SILEmailSender.csproj`:
+  ```xml
+  <PackageReference Include="EXP.DoxClient.Core" Version="1.0.0" />
+  ```
+- **Error Handling**: Implement retries or fallback mechanisms if Dox API calls fail repeatedly.
+
+### Sample Code Snippet (Conceptual)
+```csharp
+public class SILEmailSender
+{
+    private readonly IIdpLogger _logger;
+    private readonly ICDCClient _cdcClient;
+    private readonly DoxClient _doxClient;
+
+    public SILEmailSender(IIdpLogger logger, ICDCClient cdcClient, IConfiguration config)
+    {
+        _logger = logger;
+        _cdcClient = cdcClient;
+        _doxClient = new DoxClient(config["AppSettings:DoxApiKey"], "https://api.apigee.net/dox/v1");
+    }
+
+    public async Task SendEmailAndStoreInDox(string caseId, string accountId, string clientEmail, string advisorEmail)
+    {
+        var emailContent = $"Case {caseId} for Account {accountId} has been updated.";
+        var success = await SendEmail(clientEmail, advisorEmail, emailContent);
+        
+        if (success)
+        {
+            var pdfContent = GeneratePdf(caseId, accountId, emailContent);
+            var documentExchangeId = await _doxClient.UploadDocumentAsync(pdfContent, $"{caseId}_{accountId}_{DateTime.Now:yyyy-MM-dd}.pdf");
+            UpdateSILDocumentsDetail(caseId, accountId, documentExchangeId);
+        }
+    }
+
+    private async Task<bool> SendEmail(string clientEmail, string advisorEmail, string content)
+    {
+        // Email sending logic
+        return true; // Placeholder
+    }
+
+    private byte[] GeneratePdf(string caseId, string accountId, string content)
+    {
+        // PDF generation logic (e.g., using iTextSharp or similar)
+        return new byte[0]; // Placeholder
+    }
+
+    private void UpdateSILDocumentsDetail(string caseId, string accountId, string documentExchangeId)
+    {
+        // Database update logic
+    }
+}
+```
+
+### Next Steps
+- **Implementation**: Develop the `SILEmailSender` class with Dox integration.
+- **Review**: Share the user story with the team for feedback.
+- **Testing**: Create unit and integration tests aligned with the acceptance criteria.
+- **Feedback**: Let me know if you need a detailed code sample or further refinements!
+
+As of 04:25 PM IST, Thursday, September 18, 2025, this user story is ready for implementation. Let me know how you’d like to proceed!
